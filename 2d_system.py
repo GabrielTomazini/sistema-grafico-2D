@@ -7,7 +7,18 @@ from atividade6 import build_transformation_matrix
 SCREEN_SIZE = (800, 600)
 BG_COLOR = (30, 30, 30)
 LINE_COLOR = (200, 200, 200)
+SELECTED_COLOR = (255, 100, 100)  # Color for the selected object
+OBJECT_COLORS = [  # Colors for different objects
+    (200, 200, 200),  # White (default)
+    (255, 100, 100),  # Red
+    (100, 255, 100),  # Green
+    (100, 100, 255),  # Blue
+    (255, 255, 100),  # Yellow
+    (255, 100, 255),  # Magenta
+    (100, 255, 255),  # Cyan
+]
 FPS = 60
+
 
 class Viewport2D:
     def __init__(self, window, viewport):
@@ -25,31 +36,50 @@ class Viewport2D:
 
 
 class DisplayObject:
-    def __init__(self, mesh: Mesh, face_index: int):
+    def __init__(self, mesh: Mesh, name=""):
         self.mesh = mesh
-        self.face = face_index
+        self.name = name  # Store object name (from filename)
         # extract list of points as 2D world coords (ignore z)
         self.vertices = [v.coords[:2] for v in mesh.vertices.values()]
         # store original vertices for reset
         self.original = np.array(self.vertices)
         self.transform = np.identity(3)
+        # Create a set of all edges to ensure we draw boundary edges
+        self.all_edges = set()
+        self._compute_all_edges()
+
+    def _compute_all_edges(self):
+        """Precompute all edges in the mesh including boundary edges"""
+        # For each face, add its edges to the set
+        for face_index in self.mesh.faces:
+            face = self.mesh.faces[face_index]
+            he = face.half_edge
+            start = he
+            while True:
+                # Get vertices of this edge (in correct order)
+                v1 = he.next.vertex.index
+                v2 = he.vertex.index
+                # Add edge as a tuple (smaller index first for consistency)
+                edge = (min(v1, v2), max(v1, v2))
+                self.all_edges.add(edge)
+                he = he.next
+                if he == start:
+                    break
 
     def apply_transform(self, matrix):
         self.transform = matrix @ self.transform
 
     def get_transformed_edges(self):
-        # edges of face
-        edges = self.mesh.edges_of_face(self.face)
         pts = []
-        for start, end in edges:
-            # Skip edges with None values
-            if start is None or end is None:
-                continue
-            p0 = np.array([*self.vertices[start - 1], 1.0])  # indices are 1-based
-            p1 = np.array([*self.vertices[end - 1], 1.0])
+
+        # Process all unique edges (including boundary edges)
+        for v1, v2 in self.all_edges:
+            p0 = np.array([*self.vertices[v1 - 1], 1.0])  # indices are 1-based
+            p1 = np.array([*self.vertices[v2 - 1], 1.0])
             tp0 = self.transform @ p0
             tp1 = self.transform @ p1
             pts.append((tp0[:2], tp1[:2]))
+
         return pts
 
 
@@ -60,30 +90,40 @@ class DisplayFile:
     def add(self, obj: DisplayObject):
         self.objects.append(obj)
 
-    def draw(self, surface, viewport: Viewport2D):
-        for obj in self.objects:
+    def clear(self):
+        self.objects.clear()
+
+    def draw(self, surface, viewport: Viewport2D, selected=None):
+        for i, obj in enumerate(self.objects):
+            if selected is not None and i == selected:
+                color = SELECTED_COLOR
+            else:
+                color = OBJECT_COLORS[i % len(OBJECT_COLORS)]
+
             for p0, p1 in obj.get_transformed_edges():
                 x0, y0 = viewport.world_to_screen(p0[0], p0[1])
                 x1, y1 = viewport.world_to_screen(p1[0], p1[1])
-                pygame.draw.line(surface, LINE_COLOR, (x0, y0), (x1, y1), 1)
+                pygame.draw.line(surface, color, (x0, y0), (x1, y1), 1)
 
 
 class InteractiveSystem:
-    def __init__(self, obj_file):
+    def __init__(self, obj_files):
         pygame.init()
         self.screen = pygame.display.set_mode(SCREEN_SIZE)
         pygame.display.set_caption("Sistema Gráfico Iterativo 2D")
         self.clock = pygame.time.Clock()
+        self.font = pygame.font.SysFont(None, 24)
 
-        # load mesh
-        self.mesh = Mesh()
-        self.mesh.load_obj(obj_file)
-
-        # setup display file (one object per face for demo)
+        # setup display file
         self.display = DisplayFile()
-        for f in self.mesh.faces:
-            dobj = DisplayObject(self.mesh, f)
-            self.display.add(dobj)
+
+        # Load all mesh files
+        for file_path in obj_files:
+            mesh = Mesh()
+            mesh.load_obj(file_path)
+            # Extract filename without extension as the object name
+            name = file_path.split("\\")[-1].split("/")[-1].split(".")[0]
+            self.display.add(DisplayObject(mesh, name))
 
         # default window and viewport
         self.viewport = Viewport2D(
@@ -91,9 +131,9 @@ class InteractiveSystem:
         )
 
         self.running = True
+        self.selected = 0 if self.display.objects else None
 
     def run(self):
-        selected = 0
         while self.running:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -101,14 +141,22 @@ class InteractiveSystem:
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         self.running = False
+                    # Switch between objects with Tab
                     elif event.key == pygame.K_TAB:
-                        selected = (selected + 1) % len(self.display.objects)
-                    # translate selected object with arrows
-                    elif event.key in (
-                        pygame.K_UP,
-                        pygame.K_DOWN,
-                        pygame.K_LEFT,
-                        pygame.K_RIGHT,
+                        if self.display.objects:
+                            self.selected = (self.selected + 1) % len(
+                                self.display.objects
+                            )
+                    # translate object with arrows
+                    elif (
+                        event.key
+                        in (
+                            pygame.K_UP,
+                            pygame.K_DOWN,
+                            pygame.K_LEFT,
+                            pygame.K_RIGHT,
+                        )
+                        and self.selected is not None
                     ):
                         dx = dy = 0
                         if event.key == pygame.K_UP:
@@ -122,18 +170,48 @@ class InteractiveSystem:
                         mat = build_transformation_matrix(
                             [("translate", [dx, dy])], dimension=2
                         )
-                        self.display.objects[selected].apply_transform(mat)
-                    elif event.key == pygame.K_r:
+                        self.display.objects[self.selected].apply_transform(mat)
+                    # Rotate selected object
+                    elif event.key == pygame.K_r and self.selected is not None:
                         mat = build_transformation_matrix([("rotate", 10)], dimension=2)
-                        self.display.objects[selected].apply_transform(mat)
-                    elif event.key == pygame.K_s:
+                        self.display.objects[self.selected].apply_transform(mat)
+                    # Scale selected object
+                    elif event.key == pygame.K_s and self.selected is not None:
                         mat = build_transformation_matrix(
                             [("scale", [1.1, 1.1])], dimension=2
                         )
-                        self.display.objects[selected].apply_transform(mat)
+                        self.display.objects[self.selected].apply_transform(mat)
+                    # Unscale selected object
+                    elif event.key == pygame.K_d and self.selected is not None:
+                        mat = build_transformation_matrix(
+                            [("scale", [0.9, 0.9])], dimension=2
+                        )
+                        self.display.objects[self.selected].apply_transform(mat)
+                    # Counter-rotate selected object
+                    elif event.key == pygame.K_f and self.selected is not None:
+                        mat = build_transformation_matrix(
+                            [("rotate", -10)], dimension=2
+                        )
+                        self.display.objects[self.selected].apply_transform(mat)
 
+            # Draw background
             self.screen.fill(BG_COLOR)
-            self.display.draw(self.screen, self.viewport)
+
+            # Draw all objects
+            self.display.draw(self.screen, self.viewport, self.selected)
+
+            # Display UI information
+            if self.selected is not None and self.display.objects:
+                selected_obj = self.display.objects[self.selected]
+                text = f"Selected: {selected_obj.name} ({self.selected + 1}/{len(self.display.objects)})"
+                text_surface = self.font.render(text, True, (255, 255, 255))
+                self.screen.blit(text_surface, (10, 10))
+
+            # Display controls
+            controls = "Controls: Tab=Switch Object, Arrows=Move, R/F=Rotate, S/D=Scale"
+            controls_surface = self.font.render(controls, True, (180, 180, 180))
+            self.screen.blit(controls_surface, (10, SCREEN_SIZE[1] - 30))
+
             pygame.display.flip()
             self.clock.tick(FPS)
 
@@ -142,6 +220,9 @@ class InteractiveSystem:
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Uso: python graphics2d.py <arquivo.obj>")
+        print(
+            "Uso: python 2d_system.py <arquivo1.obj> [arquivo2.obj] [arquivo3.obj] ..."
+        )
     else:
-        InteractiveSystem(sys.argv[1]).run()
+        # Pass all command line arguments (OBJ files) to the InteractiveSystem
+        InteractiveSystem(sys.argv[1:]).run()

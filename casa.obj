@@ -1,0 +1,16 @@
+# Casa 2D estilizada com triângulos
+o Casa2D
+
+# Vértices (em Z = 0)
+v 0.0 0.0 0.0   
+v 4.0 0.0 0.0  
+v 4.0 2.0 0.0   
+v 0.0 2.0 0.0  
+v 2.0 3.5 0.0   
+
+# Faces triangulares da base (dividida em dois triângulos)
+f 1 2 3
+f 1 3 4
+
+# Telhado (um triângulo isósceles)
+f 4 3 5
