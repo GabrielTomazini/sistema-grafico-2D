@@ -7,7 +7,7 @@ from atividade6 import build_transformation_matrix
 SCREEN_SIZE = (800, 600)
 BG_COLOR = (30, 30, 30)
 LINE_COLOR = (200, 200, 200)
-SELECTED_COLOR = (255, 100, 100)  # Color for the selected object
+SELECTED_COLOR = (100, 255, 255)  # Color for the selected object
 OBJECT_COLORS = [  # Colors for different objects
     (200, 200, 200),  # White (default)
     (255, 100, 100),  # Red
@@ -155,7 +155,7 @@ class InteractiveSystem:
     def __init__(self, obj_files):
         pygame.init()
         self.screen = pygame.display.set_mode(SCREEN_SIZE)
-        pygame.display.set_caption("Sistema Gráfico Iterativo 2D")
+        pygame.display.set_caption("Sistema Gráfico Interativo 2D")
         self.clock = pygame.time.Clock()
         self.font = pygame.font.SysFont(None, 24)
 

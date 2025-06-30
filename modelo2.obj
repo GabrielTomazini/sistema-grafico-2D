@@ -1,7 +1,4 @@
-# Hexágono 2D formado por 6 vértices e 6 triângulos
-o Hexagono2D_Triangularizado
 
-# Vértices (todos no plano Z = 0)
 v 1.0 4.0 0.0   
 v 3.0 4.0 0.0   
 v 0.0 2.0 0.0   
@@ -10,7 +7,6 @@ v 4.0 2.0 0.0
 v 1.0 0.0 0.0   
 v 3.0 0.0 0.0   
 
-# Faces triangulares (sentido anti-horário)
 f 1 3 4
 f 1 4 2
 f 2 4 5
